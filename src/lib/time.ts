@@ -74,6 +74,13 @@ export const fmtDur = (min: number): string => {
 };
 
 export const isWorkday = (iso: string, s: Settings): boolean => {
+  // Cek tanggal libur spesifik (prioritas tertinggi)
+  if (s.workDays?.holidays?.includes(iso)) return false;
+  
+  // Cek tanggal kerja ekstra (prioritas kedua)
+  if (s.workDays?.extraWorkdays?.includes(iso)) return true;
+  
+  // Cek override per bulan
   const ovr = s.workDays?.overrides?.[monthKeyOf(iso)];
   const days = ovr ?? s.workDays?.defaultDays ?? [1, 2, 3, 4, 5];
   return days.includes(parseISO(iso).getDay());

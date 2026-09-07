@@ -72,7 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
     address: "Jl. Padasuka No. 132, Kec. Cibeunying Kidul, Kota Bandung, Jawa Barat 40125",
   },
   workHours: { start: "07:00", end: "14:30" },
-  workDays: { defaultDays: [1, 2, 3, 4, 5], overrides: {} },
+  workDays: { defaultDays: [1, 2, 3, 4, 5], overrides: {}, holidays: [], extraWorkdays: [] },
   signers: {
     principal: { name: "Drs. H. Asep Saepudin, M.Pd.", nip: "196708121992031004", title: "Kepala Sekolah" },
     staff: { name: "Rina Marlina, S.Pd.", nip: "198504172009022001", title: "Petugas Tata Usaha" },
@@ -159,9 +159,11 @@ function loadDB(): DB {
         const s = db.settings;
         if (!s.school) s.school = { ...DEFAULT_SETTINGS.school };
         if (!s.workHours) s.workHours = { ...DEFAULT_SETTINGS.workHours };
-        if (!s.workDays) s.workDays = { defaultDays: [...DEFAULT_SETTINGS.workDays.defaultDays], overrides: {} };
+        if (!s.workDays) s.workDays = { defaultDays: [...DEFAULT_SETTINGS.workDays.defaultDays], overrides: {}, holidays: [], extraWorkdays: [] };
         if (!Array.isArray(s.workDays.defaultDays)) s.workDays.defaultDays = [...DEFAULT_SETTINGS.workDays.defaultDays];
         if (!s.workDays.overrides || typeof s.workDays.overrides !== "object") s.workDays.overrides = {};
+        if (!Array.isArray(s.workDays.holidays)) s.workDays.holidays = [];
+        if (!Array.isArray(s.workDays.extraWorkdays)) s.workDays.extraWorkdays = [];
         if (!s.signers) s.signers = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.signers));
         if (!s.signers.principal) s.signers.principal = { ...DEFAULT_SETTINGS.signers.principal };
         if (!s.signers.staff) s.signers.staff = { ...DEFAULT_SETTINGS.signers.staff };

@@ -60,6 +60,8 @@ export interface Settings {
   workDays: {
     defaultDays: number[];
     overrides: Record<string, number[]>;
+    holidays: string[]; // tanggal libur spesifik (YYYY-MM-DD)
+    extraWorkdays: string[]; // tanggal kerja ekstra (YYYY-MM-DD)
   };
   signers: {
     principal: { name: string; nip: string; title: string };

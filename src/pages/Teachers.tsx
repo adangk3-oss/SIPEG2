@@ -14,7 +14,7 @@ export default function Teachers() {
   const [edit, setEdit] = useState<Teacher | null>(null);
   const [del, setDel] = useState<Teacher | null>(null);
   const [printTeachers, setPrintTeachers] = useState<Teacher[] | null>(null);
-  const [form, setForm] = useState({ name: "", nip: "", jabatan: "" });
+  const [form, setForm] = useState({ name: "", nip: "", jabatan: "", cardId: "" });
   const [enrollTeacher, setEnrollTeacher] = useState<Teacher | null>(null);
 
   const filtered = db.teachers.filter((t) =>
@@ -25,13 +25,13 @@ export default function Teachers() {
 
   const openAdd = () => {
     setEdit(null);
-    setForm({ name: "", nip: "", jabatan: "" });
+    setForm({ name: "", nip: "", jabatan: "", cardId: genCardId(db) });
     setShow(true);
   };
 
   const openEdit = (t: Teacher) => {
     setEdit(t);
-    setForm({ name: t.name, nip: t.nip, jabatan: t.jabatan });
+    setForm({ name: t.name, nip: t.nip, jabatan: t.jabatan, cardId: t.cardId });
     setShow(true);
   };
 
@@ -41,12 +41,19 @@ export default function Teachers() {
       return null;
     }
     
+    // Validasi cardId unik
+    const cardId = form.cardId.trim() || genCardId(db);
+    if (db.teachers.some(t => t.cardId === cardId)) {
+      toast.push({ type: "error", title: "Kode kartu sudah digunakan", sub: "Gunakan kode kartu yang berbeda." });
+      return null;
+    }
+    
     const newT: Teacher = {
       id: uid(), 
       name: form.name.trim(), 
       nip: form.nip.trim(), 
       jabatan: form.jabatan.trim(),
-      cardId: genCardId(db), 
+      cardId: cardId, 
       faceId: null, 
       color: AVATAR_COLORS[db.teachers.length % AVATAR_COLORS.length], 
       active: true,
@@ -69,12 +76,20 @@ export default function Teachers() {
       return;
     }
     if (edit) {
+      // Validasi cardId unik (kecuali untuk guru yang sedang diedit)
+      const cardId = form.cardId.trim() || edit.cardId;
+      if (db.teachers.some(t => t.cardId === cardId && t.id !== edit.id)) {
+        toast.push({ type: "error", title: "Kode kartu sudah digunakan", sub: "Gunakan kode kartu yang berbeda." });
+        return;
+      }
+      
       update((d) => {
         const t = d.teachers.find((x) => x.id === edit.id);
         if (t) {
           t.name = form.name.trim();
           t.nip = form.nip.trim();
           t.jabatan = form.jabatan.trim();
+          t.cardId = cardId;
           pushLog(d, currentUser?.name || "Admin", "edit", "Edit Guru", t.name);
         }
       });
@@ -217,6 +232,14 @@ export default function Teachers() {
             </Field>
             <Field label="Jabatan">
               <input className="input" value={form.jabatan} onChange={(e) => setForm({ ...form, jabatan: e.target.value })} />
+            </Field>
+            <Field label="Kode Kartu Absen" hint="Kode unik untuk kartu barcode. Kosongkan untuk generate otomatis.">
+              <input 
+                className="input font-mono uppercase" 
+                value={form.cardId} 
+                onChange={(e) => setForm({ ...form, cardId: e.target.value.toUpperCase() })}
+                placeholder="cth: SPG-0012"
+              />
             </Field>
             {!edit && (
               <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
