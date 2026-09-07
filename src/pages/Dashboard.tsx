@@ -5,6 +5,7 @@ import { fmtDateID, fmtDur, fmtHM, greeting, isWorkday, pad2, todayISO, workMinu
 import { IcAlert, IcBarcode, IcCheck, IcClockIn, IcDoorOut, IcFace, IcHome, IcIdCard, IcInfo, IcPrinter, IcReturn, IcScan, IcUsers } from "../components/icons";
 import { Avatar, Badge, EmptyState, useToast } from "../components/ui";
 import { CardPrintModal } from "./BarcodeCard";
+import { BarcodeScanModal, FaceScanModal } from "../components/ScannerModals";
 
 const MODES: { id: ScanMode; label: string; desc: string; icon: React.ReactNode }[] = [
   { id: "masuk", label: "Jam Masuk", desc: "Catat kehadiran pagi", icon: <IcClockIn className="w-5.5 h-5.5" /> },
@@ -25,6 +26,8 @@ export default function Dashboard() {
   const [manual, setManual] = useState("");
   const [result, setResult] = useState<ResultState | null>(null);
   const [printTeachers, setPrintTeachers] = useState<Teacher[] | null>(null);
+  const [showBarcode, setShowBarcode] = useState(false);
+  const [showFace, setShowFace] = useState(false);
 
   const s = db.settings;
   const workday = isWorkday(today, s);
@@ -138,24 +141,11 @@ export default function Dashboard() {
           <div className="p-5 flex flex-col">
             <p className="label">Langkah 2 · Scan Identitas Pegawai</p>
             <div className="grid grid-cols-2 gap-2.5">
-              <button onClick={() => {
-                const code = prompt("Masukkan kode barcode pegawai:");
-                if (code) processCode(code);
-              }} className="btn btn-dark btn-lg h-20 flex-col gap-1.5 rounded-xl anim-ring">
+              <button onClick={() => setShowBarcode(true)} className="btn btn-dark btn-lg h-20 flex-col gap-1.5 rounded-xl anim-ring">
                 <IcBarcode className="w-7 h-7" />
                 <span className="text-sm">Scan Barcode</span>
               </button>
-              <button onClick={() => {
-                const code = prompt("Masukkan kode wajah pegawai (NIP):");
-                if (code) {
-                  const t = db.teachers.find((x) => x.nip === code.trim() || x.cardId.toLowerCase() === code.trim().toLowerCase());
-                  if (t) processTeacher(t, "wajah");
-                  else {
-                    setResult({ key: Date.now(), ok: false, message: `Wajah dengan kode "${code}" tidak terdaftar.` });
-                    toast.push({ type: "error", title: "Wajah tidak dikenali", sub: `Kode "${code}" tidak ditemukan.` });
-                  }
-                }
-              }} className="btn btn-gold btn-lg h-20 flex-col gap-1.5 rounded-xl">
+              <button onClick={() => setShowFace(true)} className="btn btn-gold btn-lg h-20 flex-col gap-1.5 rounded-xl">
                 <IcFace className="w-7 h-7" />
                 <span className="text-sm">Scan Wajah</span>
               </button>
@@ -293,6 +283,27 @@ export default function Dashboard() {
       </div>
 
       {printTeachers && <CardPrintModal teachers={printTeachers} settings={s} onClose={() => setPrintTeachers(null)} />}
+
+      {showBarcode && (
+        <BarcodeScanModal
+          onClose={() => setShowBarcode(false)}
+          onResult={(code) => {
+            setShowBarcode(false);
+            processCode(code);
+          }}
+        />
+      )}
+
+      {showFace && (
+        <FaceScanModal
+          teachers={db.teachers}
+          onClose={() => setShowFace(false)}
+          onResult={(teacher, score) => {
+            setShowFace(false);
+            processTeacher(teacher, "wajah");
+          }}
+        />
+      )}
     </div>
   );
 }

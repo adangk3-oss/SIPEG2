@@ -4,6 +4,7 @@ import type { Teacher } from "../lib/types";
 import { IcCheck, IcFace, IcIdCard, IcPencil, IcPrinter, IcRefresh, IcSearch, IcTrash, IcUserPlus, IcUsers, IcX } from "../components/icons";
 import { Avatar, Badge, Confirm, EmptyState, Field, Modal, useToast } from "../components/ui";
 import { CardPrintModal } from "./BarcodeCard";
+import { FaceEnrollModal } from "../components/ScannerModals";
 
 export default function Teachers() {
   const { db, update, currentUser } = useStore();
@@ -14,6 +15,7 @@ export default function Teachers() {
   const [del, setDel] = useState<Teacher | null>(null);
   const [printTeachers, setPrintTeachers] = useState<Teacher[] | null>(null);
   const [form, setForm] = useState({ name: "", nip: "", jabatan: "" });
+  const [enrollTeacher, setEnrollTeacher] = useState<Teacher | null>(null);
 
   const filtered = db.teachers.filter((t) =>
     t.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -132,6 +134,10 @@ export default function Teachers() {
                     </td>
                     <td className="td">
                       <div className="flex justify-end gap-1.5 pr-2">
+                        <button title={t.faceId ? "Perbarui wajah" : "Daftarkan wajah"} onClick={() => setEnrollTeacher(t)}
+                          className={`btn btn-ghost btn-sm px-2 ${t.faceId ? "hover:!text-emerald-600" : "hover:!text-amber-600"}`}>
+                          <IcFace className="w-4 h-4" />
+                        </button>
                         <button title={t.active ? "Nonaktifkan" : "Aktifkan"} onClick={() => toggleActive(t)}
                           className="btn btn-ghost btn-sm px-2 hover:!text-pine-700">
                           <IcRefresh className="w-4 h-4" />
@@ -186,6 +192,24 @@ export default function Teachers() {
       )}
 
       {printTeachers && <CardPrintModal teachers={printTeachers} settings={db.settings} onClose={() => setPrintTeachers(null)} />}
+
+      {enrollTeacher && (
+        <FaceEnrollModal
+          teacher={enrollTeacher}
+          onClose={() => setEnrollTeacher(null)}
+          onEnrolled={(dataUrl) => {
+            update((d) => {
+              const t = d.teachers.find((x) => x.id === enrollTeacher.id);
+              if (t) {
+                t.faceId = dataUrl;
+                pushLog(d, currentUser?.name || "Admin", "edit", "Daftar Wajah", t.name);
+              }
+            });
+            toast.push({ type: "success", title: "Wajah terdaftar", sub: enrollTeacher.name });
+            setEnrollTeacher(null);
+          }}
+        />
+      )}
     </div>
   );
 }

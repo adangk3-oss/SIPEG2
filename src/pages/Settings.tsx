@@ -11,6 +11,85 @@ const DAY_FULL = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"
 
 type Tab = "jam" | "hari" | "ttd" | "sekolah" | "data";
 
+/* ---------- Calendar View Component ---------- */
+function CalendarView({
+  month,
+  workDays,
+  onToggleDay,
+  isOverride,
+}: {
+  month: string;
+  workDays: number[];
+  onToggleDay: (dayOfWeek: number) => void;
+  isOverride: boolean;
+}) {
+  const [year, monthNum] = month.split("-").map(Number);
+  const firstDay = new Date(year, monthNum - 1, 1);
+  const lastDay = new Date(year, monthNum, 0);
+  const daysInMonth = lastDay.getDate();
+  const startDayOfWeek = firstDay.getDay();
+  const today = new Date();
+  const isCurrentMonth = today.getFullYear() === year && today.getMonth() === monthNum - 1;
+
+  const days: Array<{ date: number; dayOfWeek: number } | null> = [];
+  for (let i = 0; i < startDayOfWeek; i++) days.push(null);
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, monthNum - 1, d);
+    days.push({ date: d, dayOfWeek: date.getDay() });
+  }
+
+  return (
+    <div>
+      {/* Day headers */}
+      <div className="grid grid-cols-7 gap-1 mb-2">
+        {DAY_SHORT.map((day, idx) => (
+          <div key={idx} className="text-center text-xs font-bold text-ink/50 py-2">
+            {day}
+          </div>
+        ))}
+      </div>
+
+      {/* Calendar grid */}
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((day, idx) => {
+          if (!day) {
+            return <div key={idx} className="aspect-square" />;
+          }
+
+          const isWork = workDays.includes(day.dayOfWeek);
+          const isToday = isCurrentMonth && day.date === today.getDate();
+          const isWeekend = day.dayOfWeek === 0 || day.dayOfWeek === 6;
+
+          return (
+            <button
+              key={idx}
+              onClick={() => onToggleDay(day.dayOfWeek)}
+              className={`
+                aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5
+                transition-all hover:scale-105 font-bold text-sm
+                ${isWork
+                  ? isToday
+                    ? "bg-amber-400/30 border-2 border-amber-500 text-amber-700"
+                    : "bg-pine-700 text-white shadow-sm"
+                  : isToday
+                    ? "bg-amber-400/20 border-2 border-amber-500 text-ink/40"
+                    : isWeekend
+                      ? "bg-red-500/10 text-red-600/60"
+                      : "bg-ink/10 text-ink/40"
+                }
+              `}
+              title={`${DAY_FULL[day.dayOfWeek]}, ${day.date} ${month} — ${isWork ? "Hari Kerja" : "Hari Libur"}`}
+            >
+              <span className="text-xs opacity-70">{DAY_SHORT[day.dayOfWeek]}</span>
+              <span className="text-base">{day.date}</span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function LogoUpload({ label, desc, value, onSet }: { label: string; desc: string; value: string | null; onSet: (v: string | null) => void }) {
   const toast = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -114,48 +193,115 @@ export default function Settings() {
       )}
 
       {tab === "hari" && (
-        <div className="grid lg:grid-cols-2 gap-4 anim-fade-up">
-          <div className="panel p-6">
-            <h3 className="font-display font-bold text-lg flex items-center gap-2"><IcCalendarMonth className="w-5 h-5 text-pine-600" /> Hari Kerja Default</h3>
-            <p className="text-sm text-ink/55 mt-1">Berlaku untuk semua bulan yang tidak punya aturan khusus.</p>
-            <div className="flex flex-wrap gap-2 mt-5">
-              {DAY_SHORT.map((d, i) => {
-                const on = s.workDays.defaultDays.includes(i);
-                return <button key={d} onClick={() => toggleDefaultDay(i)} className={`w-14 h-14 rounded-xl font-display font-bold text-sm transition-all ${on ? "bg-pine-700 text-white shadow-md shadow-pine-900/20 -translate-y-0.5" : "bg-ink/6 text-ink/45 hover:bg-ink/10"}`} title={DAY_FULL[i]}>{d}</button>;
-              })}
-            </div>
-            <p className="text-xs text-ink/45 mt-4">{s.workDays.defaultDays.length === 0 ? "Peringatan: tidak ada hari kerja terpilih!" : `${s.workDays.defaultDays.length} hari kerja per minggu · tersimpan otomatis`}</p>
-          </div>
-          <div className="panel p-6">
-            <h3 className="font-display font-bold text-lg flex items-center gap-2"><IcPencil className="w-5 h-5 text-pine-600" /> Aturan Khusus per Bulan</h3>
-            <div className="flex flex-wrap items-end gap-2 mt-5">
+        <div className="space-y-4 anim-fade-up">
+          {/* Mode selector */}
+          <div className="panel p-5">
+            <div className="flex items-center justify-between flex-wrap gap-3">
               <div>
-                <label className="label">Bulan</label>
-                <input type="month" className="input w-[160px]" value={ovrMonth} onChange={(e) => { setOvrMonth(e.target.value); setOvrDays(s.workDays?.overrides?.[e.target.value] ?? s.workDays?.defaultDays ?? [1, 2, 3, 4, 5]); }} />
+                <h3 className="font-display font-bold text-lg flex items-center gap-2">
+                  <IcCalendarMonth className="w-5 h-5 text-pine-600" /> Pengaturan Hari Kerja
+                </h3>
+                <p className="text-sm text-ink/55 mt-0.5">Klik tanggal untuk menandai hari kerja/libur</p>
               </div>
-              <button className="btn btn-primary btn-md" onClick={saveOverride}>Simpan Khusus</button>
-              {s.workDays?.overrides?.[ovrMonth] && <button className="btn btn-danger btn-md" onClick={() => { removeOverride(ovrMonth); setOvrDays(s.workDays?.defaultDays ?? [1, 2, 3, 4, 5]); }}>Hapus Aturan</button>}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setOvrMonth("")}
+                  className={`btn btn-sm ${ovrMonth === "" ? "btn-primary" : "btn-outline"}`}
+                >
+                  Default (Semua Bulan)
+                </button>
+                <button
+                  onClick={() => setOvrMonth(monthKeyOf(todayISO()))}
+                  className={`btn btn-sm ${ovrMonth !== "" ? "btn-primary" : "btn-outline"}`}
+                >
+                  Per Bulan
+                </button>
+              </div>
             </div>
-            <div className="flex flex-wrap gap-2 mt-4">
-              {DAY_SHORT.map((d, i) => {
-                const on = ovrDays.includes(i);
-                return <button key={d} onClick={() => setOvrDays((p) => on ? p.filter((x) => x !== i) : [...p, i])} className={`w-12 h-12 rounded-lg font-display font-bold text-xs transition-all ${on ? "bg-amber-400 text-pine-950 shadow-sm" : "bg-ink/6 text-ink/45"}`}>{d}</button>;
-              })}
-            </div>
-            <div className="mt-5 border-t border-ink/8 pt-4">
-              <p className="label">Bulan dengan aturan khusus</p>
-              {Object.keys(s.workDays?.overrides ?? {}).length === 0 ? <p className="text-sm text-ink/45">Belum ada — semua bulan memakai default.</p> : (
-                <div className="flex flex-wrap gap-2">
-                  {Object.entries(s.workDays?.overrides ?? {}).map(([k, v]) => (
-                    <span key={k} className="inline-flex items-center gap-2 rounded-lg bg-amber-400/12 border border-amber-500/30 text-amber-800 text-xs font-bold px-2.5 py-1.5">
-                      {fmtMonthID(k)} · {v.map((d) => DAY_SHORT[d]).join(" ")}
-                      <button onClick={() => removeOverride(k)} className="hover:text-red-600" title="Hapus aturan"><IcTrash className="w-3.5 h-3.5" /></button>
-                    </span>
-                  ))}
-                </div>
+
+            {ovrMonth !== "" && (
+              <div className="mt-4 flex items-center gap-3">
+                <label className="label mb-0">Pilih Bulan:</label>
+                <input
+                  type="month"
+                  className="input w-[180px]"
+                  value={ovrMonth}
+                  onChange={(e) => {
+                    const newMonth = e.target.value;
+                    setOvrMonth(newMonth);
+                    const override = s.workDays?.overrides?.[newMonth];
+                    setOvrDays(override ?? s.workDays?.defaultDays ?? [1, 2, 3, 4, 5]);
+                  }}
+                />
+                {s.workDays?.overrides?.[ovrMonth] && (
+                  <button className="btn btn-danger btn-sm" onClick={() => { removeOverride(ovrMonth); setOvrMonth(""); }}>
+                    Hapus Aturan Bulan Ini
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Calendar */}
+          <div className="panel p-5">
+            <CalendarView
+              month={ovrMonth || monthKeyOf(todayISO())}
+              workDays={ovrDays}
+              onToggleDay={(day) => {
+                setOvrDays((prev) =>
+                  prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day].sort()
+                );
+              }}
+              isOverride={ovrMonth !== ""}
+            />
+
+            <div className="mt-4 flex items-center justify-between flex-wrap gap-3">
+              <div className="text-sm text-ink/60">
+                <span className="font-bold text-pine-700">{ovrDays.length}</span> hari kerja
+                {ovrMonth === "" ? " per minggu (default)" : ` di ${fmtMonthID(ovrMonth)}`}
+              </div>
+              {ovrMonth !== "" && (
+                <button className="btn btn-primary btn-md" onClick={saveOverride}>
+                  <IcCheck className="w-4 h-4" /> Simpan Aturan Bulan Ini
+                </button>
               )}
             </div>
           </div>
+
+          {/* Legend */}
+          <div className="panel p-4">
+            <div className="flex items-center gap-6 text-sm flex-wrap">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-pine-700 flex items-center justify-center text-white font-bold text-xs">15</div>
+                <span className="text-ink/60">Hari Kerja</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-ink/10 flex items-center justify-center text-ink/40 font-bold text-xs">15</div>
+                <span className="text-ink/60">Hari Libur</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-400/30 border-2 border-amber-500 flex items-center justify-center text-amber-700 font-bold text-xs">15</div>
+                <span className="text-ink/60">Hari Ini</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Override list */}
+          {Object.keys(s.workDays?.overrides ?? {}).length > 0 && (
+            <div className="panel p-5">
+              <h4 className="font-display font-bold text-base mb-3 flex items-center gap-2">
+                <IcPencil className="w-4 h-4 text-pine-600" /> Aturan Khusus per Bulan
+              </h4>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(s.workDays?.overrides ?? {}).map(([k, v]) => (
+                  <span key={k} className="inline-flex items-center gap-2 rounded-lg bg-amber-400/12 border border-amber-500/30 text-amber-800 text-xs font-bold px-2.5 py-1.5">
+                    {fmtMonthID(k)} · {v.map((d) => DAY_SHORT[d]).join(" ")}
+                    <button onClick={() => removeOverride(k)} className="hover:text-red-600" title="Hapus aturan"><IcTrash className="w-3.5 h-3.5" /></button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
