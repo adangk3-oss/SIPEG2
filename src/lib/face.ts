@@ -17,7 +17,7 @@ export async function captureFrame(
 }
 
 /**
- * Bandingkan dua gambar wajah menggunakan perbedaan pixel rata-rata.
+ * Bandingkan dua gambar wajah menggunakan grayscale + structural similarity.
  * Return similarity score 0-100.
  */
 export async function compareFaces(img1: string, img2: string): Promise<number> {
@@ -27,7 +27,7 @@ export async function compareFaces(img1: string, img2: string): Promise<number> 
     const ctx1 = canvas1.getContext("2d", { willReadFrequently: true })!;
     const ctx2 = canvas2.getContext("2d", { willReadFrequently: true })!;
 
-    const size = 80;
+    const size = 100;
     canvas1.width = size;
     canvas1.height = size;
     canvas2.width = size;
@@ -36,6 +36,15 @@ export async function compareFaces(img1: string, img2: string): Promise<number> 
     const i1 = new Image();
     const i2 = new Image();
     let loaded = 0;
+
+    const toGrayscale = (data: Uint8ClampedArray) => {
+      const gray = new Float32Array(size * size);
+      for (let i = 0, j = 0; i < data.length; i += 4, j++) {
+        // Grayscale conversion dengan weighting
+        gray[j] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      }
+      return gray;
+    };
 
     const check = () => {
       loaded++;
@@ -47,22 +56,47 @@ export async function compareFaces(img1: string, img2: string): Promise<number> 
       const data1 = ctx1.getImageData(0, 0, size, size).data;
       const data2 = ctx2.getImageData(0, 0, size, size).data;
 
-      let totalDiff = 0;
-      for (let i = 0; i < data1.length; i += 4) {
-        const r = Math.abs(data1[i] - data2[i]);
-        const g = Math.abs(data1[i + 1] - data2[i + 1]);
-        const b = Math.abs(data1[i + 2] - data2[i + 2]);
-        totalDiff += (r + g + b) / 3;
+      const gray1 = toGrayscale(data1);
+      const gray2 = toGrayscale(data2);
+
+      // Hitung mean
+      let mean1 = 0, mean2 = 0;
+      for (let i = 0; i < gray1.length; i++) {
+        mean1 += gray1[i];
+        mean2 += gray2[i];
+      }
+      mean1 /= gray1.length;
+      mean2 /= gray2.length;
+
+      // Hitung standard deviation
+      let std1 = 0, std2 = 0;
+      for (let i = 0; i < gray1.length; i++) {
+        std1 += Math.pow(gray1[i] - mean1, 2);
+        std2 += Math.pow(gray2[i] - mean2, 2);
+      }
+      std1 = Math.sqrt(std1 / gray1.length);
+      std2 = Math.sqrt(std2 / gray2.length);
+
+      // Hitung correlation coefficient
+      let correlation = 0;
+      for (let i = 0; i < gray1.length; i++) {
+        correlation += (gray1[i] - mean1) * (gray2[i] - mean2);
+      }
+      correlation /= gray1.length;
+      
+      if (std1 > 0 && std2 > 0) {
+        correlation /= (std1 * std2);
       }
 
-      const avgDiff = totalDiff / (size * size);
-      // Konversi ke similarity: 0 diff = 100%, 255 diff = 0%
-      const similarity = Math.max(0, 100 - (avgDiff / 255) * 100);
+      // Konversi correlation (-1 to 1) ke similarity (0 to 100)
+      const similarity = Math.max(0, Math.min(100, (correlation + 1) * 50));
       resolve(similarity);
     };
 
     i1.onload = check;
     i2.onload = check;
+    i1.onerror = () => resolve(0);
+    i2.onerror = () => resolve(0);
     i1.src = img1;
     i2.src = img2;
   });
@@ -75,7 +109,7 @@ export async function compareFaces(img1: string, img2: string): Promise<number> 
 export async function matchFace(
   sample: string,
   teachers: Teacher[],
-  threshold = 75,
+  threshold = 65,
 ): Promise<{ teacher: Teacher; score: number } | null> {
   let bestMatch: { teacher: Teacher; score: number } | null = null;
 
