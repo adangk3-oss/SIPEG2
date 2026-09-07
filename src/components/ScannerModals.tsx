@@ -1,11 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
+import { BrowserMultiFormatReader } from "@zxing/browser";
 import type { Teacher } from "../lib/types";
 import { IcCamera, IcCheck, IcX, IcAlert, IcRefresh, IcBarcode } from "./icons";
 import { Modal, useToast } from "./ui";
 import { captureFrame, matchFace } from "../lib/face";
 
 /* ================================================================
-   BARCODE SCANNER — dengan fallback input manual
+   BARCODE SCANNER — menggunakan @zxing/browser
    ================================================================ */
 export function BarcodeScanModal({
   onClose, onResult,
@@ -14,55 +15,77 @@ export function BarcodeScanModal({
   onResult: (code: string) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(true);
   const [manualMode, setManualMode] = useState(false);
   const [manualCode, setManualCode] = useState("");
-  const streamRef = useRef<MediaStream | null>(null);
-  const scanIntervalRef = useRef<number | null>(null);
+  const codeReaderRef = useRef<BrowserMultiFormatReader | null>(null);
+  const controlsRef = useRef<any>(null);
 
   useEffect(() => {
     if (manualMode) return;
     
     let cancelled = false;
-    const startCamera = async () => {
+    const startScanner = async () => {
       try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment", width: 640, height: 480 },
-          audio: false,
-        });
-        
-        if (cancelled) {
-          stream.getTracks().forEach(t => t.stop());
-          return;
+        // Cek apakah browser mendukung kamera
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Browser tidak mendukung akses kamera");
         }
+
+        const codeReader = new BrowserMultiFormatReader();
+        codeReaderRef.current = codeReader;
+
+        // Dapatkan daftar perangkat video
+        const devices = await BrowserMultiFormatReader.listVideoInputDevices();
         
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+        if (devices.length === 0) {
+          throw new Error("Tidak ada kamera terdeteksi");
         }
-        
-        // Simulasi scanning (karena @zxing/browser mungkin tidak tersedia)
-        // User bisa menggunakan input manual sebagai fallback
+
+        // Gunakan kamera pertama
+        const deviceId = devices[0].deviceId;
+
+        // Mulai decoding dari video
+        const controls = await codeReader.decodeFromVideoDevice(
+          deviceId,
+          videoRef.current!,
+          (result, error) => {
+            if (cancelled) return;
+            
+            if (result) {
+              const text = result.getText();
+              if (text) {
+                setScanning(false);
+                // Stop scanner
+                controls.stop();
+                // Panggil callback dengan kode yang discan
+                onResult(text.toUpperCase());
+              }
+            }
+          }
+        );
+
+        controlsRef.current = controls;
         setError(null);
       } catch (e: any) {
         if (!cancelled) {
+          console.error("Scanner error:", e);
           setError(e?.message || "Gagal mengakses kamera. Gunakan input manual di bawah.");
           setManualMode(true);
         }
       }
     };
     
-    startCamera();
+    startScanner();
     
     return () => {
       cancelled = true;
-      if (scanIntervalRef.current) clearInterval(scanIntervalRef.current);
-      streamRef.current?.getTracks().forEach(t => t.stop());
+      if (controlsRef.current) {
+        controlsRef.current.stop();
+      }
     };
-  }, [manualMode]);
+  }, [manualMode, onResult]);
 
   const submitManual = () => {
     if (manualCode.trim()) {
@@ -87,7 +110,6 @@ export function BarcodeScanModal({
               playsInline
               muted
             />
-            <canvas ref={canvasRef} className="hidden" width={640} height={480} />
             {scanning && !error && (
               <>
                 <div className="absolute inset-0 scanline pointer-events-none" />
@@ -160,10 +182,10 @@ export function FaceScanModal({
   onResult: (teacher: Teacher, score: number) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(true);
-  const [status, setStatus] = useState("Mengaktifkan kamera…");
+  const [status, setStatus] = useState("Mengaktifkan kamera...");
+  const [recognized, setRecognized] = useState<Teacher | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<number | null>(null);
   const toast = useToast();
@@ -178,42 +200,72 @@ export function FaceScanModal({
           setError("Belum ada pegawai yang mendaftarkan wajah. Daftarkan terlebih dahulu di menu Data Guru.");
           return;
         }
+
+        // Cek apakah browser mendukung kamera
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Browser tidak mendukung akses kamera");
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480, facingMode: "user" },
           audio: false,
         });
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
         }
-        setStatus("Mengenali wajah… arahkan wajah ke kamera");
 
-        // Ambil frame setiap 1.2 detik dan cocokkan
+        setStatus("Mengenali wajah... arahkan wajah ke kamera");
+
+        // Ambil frame setiap 1.5 detik dan cocokkan
         intervalRef.current = window.setInterval(async () => {
           if (!videoRef.current || cancelled) return;
+          
           try {
             const frame = await captureFrame(videoRef.current);
             const match = await matchFace(frame, teachers);
+            
             if (match && !cancelled) {
               setScanning(false);
+              setRecognized(match.teacher);
+              
+              // Stop kamera
               stream.getTracks().forEach((t) => t.stop());
               if (intervalRef.current) clearInterval(intervalRef.current);
-              toast.push({ type: "success", title: "Wajah dikenali", sub: `${match.teacher.name} (${match.score}%)` });
-              onResult(match.teacher, match.score);
+              
+              // Tampilkan notifikasi
+              toast.push({ 
+                type: "success", 
+                title: "Wajah dikenali", 
+                sub: `${match.teacher.name} (${Math.round(match.score)}%)` 
+              });
+              
+              // Panggil callback setelah 1 detik
+              setTimeout(() => {
+                onResult(match.teacher, match.score);
+              }, 1000);
             }
-          } catch {
-            /* skip frame yang gagal */
+          } catch (err) {
+            console.error("Face recognition error:", err);
           }
-        }, 1200);
+        }, 1500);
       } catch (e: any) {
         if (!cancelled) {
+          console.error("Camera error:", e);
           setError(e?.message || "Gagal mengakses kamera. Pastikan izin kamera diberikan.");
         }
       }
     };
+
     start();
+
     return () => {
       cancelled = true;
       if (intervalRef.current) clearInterval(intervalRef.current);
@@ -228,11 +280,16 @@ export function FaceScanModal({
       onClose={onClose}
       width="max-w-lg"
     >
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="relative aspect-[4/3] bg-pine-950 rounded-xl overflow-hidden">
-          <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-          <canvas ref={canvasRef} className="hidden" width={160} height={120} />
-          {scanning && !error && (
+          <video
+            ref={videoRef}
+            className="w-full h-full object-cover"
+            playsInline
+            muted
+          />
+          
+          {scanning && !error && !recognized && (
             <>
               <div className="absolute inset-12 border-2 border-amber-400/60 rounded-full pointer-events-none" />
               <div className="absolute inset-14 border border-amber-400/30 rounded-full pointer-events-none anim-ring" />
@@ -241,6 +298,16 @@ export function FaceScanModal({
               </div>
             </>
           )}
+
+          {recognized && (
+            <div className="absolute inset-0 bg-emerald-600/90 flex flex-col items-center justify-center text-white p-6">
+              <IcCheck className="w-16 h-16 mb-4" />
+              <p className="font-bold text-xl mb-2">Wajah Dikenali!</p>
+              <p className="text-lg">{recognized.name}</p>
+              <p className="text-sm mt-2 opacity-80">Presensi akan otomatis tercatat...</p>
+            </div>
+          )}
+
           {error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-pine-950/90 text-white p-6 text-center">
               <IcAlert className="w-10 h-10 text-red-400 mb-3" />
@@ -248,9 +315,15 @@ export function FaceScanModal({
             </div>
           )}
         </div>
-        <p className="text-[11px] text-ink/45 text-center">
-          {enrolled.length} pegawai telah mendaftarkan wajah · Pencocokan otomatis setiap 1,2 detik
-        </p>
+
+        <div className="text-center">
+          <p className="text-sm text-ink/60">
+            <span className="font-bold text-pine-700">{enrolled.length}</span> pegawai telah mendaftarkan wajah
+          </p>
+          <p className="text-xs text-ink/45 mt-1">
+            Pencocokan otomatis setiap 1,5 detik
+          </p>
+        </div>
       </div>
     </Modal>
   );
@@ -267,9 +340,7 @@ export function FaceEnrollModal({
   onEnrolled: (dataUrl: string) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<string | null>(teacher.faceId);
   const [captured, setCaptured] = useState<string | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -277,21 +348,34 @@ export function FaceEnrollModal({
     let cancelled = false;
     const start = async () => {
       try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Browser tidak mendukung akses kamera");
+        }
+
         const stream = await navigator.mediaDevices.getUserMedia({
           video: { width: 640, height: 480, facingMode: "user" },
           audio: false,
         });
-        if (cancelled) { stream.getTracks().forEach((t) => t.stop()); return; }
+
+        if (cancelled) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
+        }
+
         streamRef.current = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           await videoRef.current.play();
         }
       } catch (e: any) {
-        if (!cancelled) setError(e?.message || "Gagal mengakses kamera.");
+        if (!cancelled) {
+          setError(e?.message || "Gagal mengakses kamera.");
+        }
       }
     };
+
     start();
+
     return () => {
       cancelled = true;
       streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -349,7 +433,6 @@ export function FaceEnrollModal({
           ) : (
             <>
               <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
-              <canvas ref={canvasRef} className="hidden" width={200} height={150} />
               {!error && (
                 <div className="absolute inset-12 border-2 border-amber-400/60 rounded-full pointer-events-none" />
               )}
@@ -362,9 +445,9 @@ export function FaceEnrollModal({
             </div>
           )}
         </div>
-        {preview && !captured && (
+        {teacher.faceId && !captured && (
           <div className="flex items-center gap-3 rounded-lg bg-pine-700/8 border border-pine-700/20 p-3">
-            <img src={preview} alt="Wajah terdaftar" className="w-12 h-12 rounded-full object-cover" />
+            <img src={teacher.faceId} alt="Wajah terdaftar" className="w-12 h-12 rounded-full object-cover" />
             <div className="text-xs">
               <p className="font-bold">Wajah sudah terdaftar</p>
               <p className="text-ink/50">Ambil foto baru untuk memperbarui</p>

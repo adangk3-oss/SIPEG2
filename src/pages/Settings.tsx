@@ -48,19 +48,19 @@ function CalendarView({
   return (
     <div>
       {/* Day headers */}
-      <div className="grid grid-cols-7 gap-1 mb-2">
+      <div className="grid grid-cols-7 gap-0.5 mb-1">
         {DAY_SHORT.map((day, idx) => (
-          <div key={idx} className="text-center text-xs font-bold text-ink/50 py-2">
+          <div key={idx} className="text-center text-[10px] font-bold text-ink/50 py-1">
             {day}
           </div>
         ))}
       </div>
 
       {/* Calendar grid */}
-      <div className="grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-0.5">
         {days.map((day, idx) => {
           if (!day) {
-            return <div key={idx} className="aspect-square" />;
+            return <div key={idx} className="h-9" />;
           }
 
           const isHoliday = holidays.includes(day.iso);
@@ -73,13 +73,13 @@ function CalendarView({
 
           let bgClass = "";
           if (isHoliday) {
-            bgClass = "bg-red-500/20 text-red-700 border-2 border-red-500/40";
+            bgClass = "bg-red-500/20 text-red-700 border border-red-500/40";
           } else if (isExtraWork) {
-            bgClass = "bg-emerald-500/20 text-emerald-700 border-2 border-emerald-500/40";
+            bgClass = "bg-emerald-500/20 text-emerald-700 border border-emerald-500/40";
           } else if (isWork) {
-            bgClass = isToday ? "bg-amber-400/30 border-2 border-amber-500 text-amber-700" : "bg-pine-700 text-white shadow-sm";
+            bgClass = isToday ? "bg-amber-400/30 border border-amber-500 text-amber-700" : "bg-pine-700 text-white";
           } else {
-            bgClass = isToday ? "bg-amber-400/20 border-2 border-amber-500 text-ink/40" : isWeekend ? "bg-red-500/10 text-red-600/60" : "bg-ink/10 text-ink/40";
+            bgClass = isToday ? "bg-amber-400/20 border border-amber-500 text-ink/40" : isWeekend ? "bg-red-500/10 text-red-600/60" : "bg-ink/10 text-ink/40";
           }
 
           return (
@@ -87,16 +87,15 @@ function CalendarView({
               key={idx}
               onClick={() => onToggleDate(day.iso)}
               className={`
-                aspect-square rounded-lg flex flex-col items-center justify-center gap-0.5
-                transition-all hover:scale-105 font-bold text-sm relative
+                h-9 rounded flex items-center justify-center
+                transition-all hover:scale-105 font-bold text-xs relative
                 ${bgClass}
               `}
               title={`${DAY_FULL[day.dayOfWeek]}, ${day.date} ${month} — ${isHoliday ? "Libur (Override)" : isExtraWork ? "Kerja (Override)" : isWork ? "Hari Kerja" : "Hari Libur"}`}
             >
-              <span className="text-xs opacity-70">{DAY_SHORT[day.dayOfWeek]}</span>
-              <span className="text-base">{day.date}</span>
+              <span>{day.date}</span>
               {hasOverride && (
-                <span className="absolute top-0.5 right-0.5 w-1.5 h-1.5 rounded-full bg-amber-500" title="Override manual" />
+                <span className="absolute top-0.5 right-0.5 w-1 h-1 rounded-full bg-amber-500" title="Override manual" />
               )}
             </button>
           );
@@ -266,14 +265,14 @@ export default function Settings() {
           <div className="panel p-5">
             <h4 className="font-display font-bold text-base mb-3">Hari Kerja Default (per Nama Hari)</h4>
             <p className="text-xs text-ink/50 mb-3">Berlaku untuk semua bulan kecuali ada override per tanggal.</p>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {DAY_SHORT.map((d, i) => {
                 const on = s.workDays?.defaultDays?.includes(i);
                 return (
                   <button
                     key={i}
                     onClick={() => toggleDefaultDay(i)}
-                    className={`w-14 h-14 rounded-lg font-bold text-sm transition-all ${
+                    className={`w-11 h-11 rounded-lg font-bold text-xs transition-all ${
                       on ? "bg-pine-700 text-white shadow-md" : "bg-ink/10 text-ink/40 hover:bg-ink/15"
                     }`}
                   >
