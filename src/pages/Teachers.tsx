@@ -35,7 +35,35 @@ export default function Teachers() {
     setShow(true);
   };
 
-  const save = () => {
+  const addTeacher = (): Teacher | null => {
+    if (!form.name.trim()) {
+      toast.push({ type: "error", title: "Nama wajib diisi" });
+      return null;
+    }
+    
+    const newT: Teacher = {
+      id: uid(), 
+      name: form.name.trim(), 
+      nip: form.nip.trim(), 
+      jabatan: form.jabatan.trim(),
+      cardId: genCardId(db), 
+      faceId: null, 
+      color: AVATAR_COLORS[db.teachers.length % AVATAR_COLORS.length], 
+      active: true,
+    };
+    
+    update((d) => {
+      d.teachers.push(newT);
+      pushLog(d, currentUser?.name || "Admin", "edit", "Tambah Guru", newT.name);
+    });
+    
+    toast.push({ type: "success", title: "Guru ditambahkan", sub: `${newT.name} · ${newT.cardId}` });
+    setShow(false);
+    
+    return newT;
+  };
+
+  const save = (withFaceScan = false) => {
     if (!form.name.trim()) {
       toast.push({ type: "error", title: "Nama wajib diisi" });
       return;
@@ -51,18 +79,14 @@ export default function Teachers() {
         }
       });
       toast.push({ type: "success", title: "Data guru diperbarui", sub: form.name });
+      setShow(false);
     } else {
-      const newT: Teacher = {
-        id: uid(), name: form.name.trim(), nip: form.nip.trim(), jabatan: form.jabatan.trim(),
-        cardId: genCardId(db), faceId: null, color: AVATAR_COLORS[db.teachers.length % AVATAR_COLORS.length], active: true,
-      };
-      update((d) => {
-        d.teachers.push(newT);
-        pushLog(d, currentUser?.name || "Admin", "edit", "Tambah Guru", newT.name);
-      });
-      toast.push({ type: "success", title: "Guru ditambahkan", sub: `${newT.name} · ${newT.cardId}` });
+      const newTeacher = addTeacher();
+      if (withFaceScan && newTeacher) {
+        // Langsung buka modal scan wajah setelah guru ditambahkan
+        setTimeout(() => setEnrollTeacher(newTeacher), 300);
+      }
     }
-    setShow(false);
   };
 
   const remove = (t: Teacher) => {
@@ -164,12 +188,24 @@ export default function Teachers() {
       {show && (
         <Modal title={edit ? "Edit Guru" : "Tambah Guru Baru"} onClose={() => setShow(false)}
           footer={
-            <>
-              <button className="btn btn-outline btn-md" onClick={() => setShow(false)}>Batal</button>
-              <button className="btn btn-primary btn-md" onClick={save}>
-                <IcCheck className="w-4.5 h-4.5" /> Simpan
-              </button>
-            </>
+            edit ? (
+              <>
+                <button className="btn btn-outline btn-md" onClick={() => setShow(false)}>Batal</button>
+                <button className="btn btn-primary btn-md" onClick={() => save()}>
+                  <IcCheck className="w-4.5 h-4.5" /> Simpan
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="btn btn-outline btn-md" onClick={() => setShow(false)}>Batal</button>
+                <button className="btn btn-primary btn-md" onClick={() => save(false)}>
+                  <IcCheck className="w-4.5 h-4.5" /> Tambahkan
+                </button>
+                <button className="btn btn-gold btn-md" onClick={() => save(true)}>
+                  <IcFace className="w-4.5 h-4.5" /> Simpan & Scan Wajah
+                </button>
+              </>
+            )
           }
         >
           <div className="space-y-4">
@@ -182,6 +218,12 @@ export default function Teachers() {
             <Field label="Jabatan">
               <input className="input" value={form.jabatan} onChange={(e) => setForm({ ...form, jabatan: e.target.value })} />
             </Field>
+            {!edit && (
+              <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
+                <p className="font-bold mb-1">💡 Tips:</p>
+                <p>Klik <b>"Tambahkan"</b> untuk menyimpan data saja, atau <b>"Simpan & Scan Wajah"</b> untuk langsung mendaftarkan wajah guru setelah data disimpan.</p>
+              </div>
+            )}
           </div>
         </Modal>
       )}
