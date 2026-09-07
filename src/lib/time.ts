@@ -74,17 +74,19 @@ export const fmtDur = (min: number): string => {
 };
 
 export const isWorkday = (iso: string, s: Settings): boolean => {
-  const ovr = s.workDays.overrides[monthKeyOf(iso)];
-  const days = ovr ?? s.workDays.defaultDays;
+  const ovr = s.workDays?.overrides?.[monthKeyOf(iso)];
+  const days = ovr ?? s.workDays?.defaultDays ?? [1, 2, 3, 4, 5];
   return days.includes(parseISO(iso).getDay());
 };
 
 export const workdaysOfMonth = (key: string, s: Settings): string[] => {
-  const [y, m] = key.split("-").map(Number);
+  const parts = key.split("-").map(Number);
+  const y = parts[0] || new Date().getFullYear();
+  const m = parts[1] || 1;
   const total = new Date(y, m, 0).getDate();
   const out: string[] = [];
   for (let d = 1; d <= total; d++) {
-    const iso = `${key}-${pad2(d)}`;
+    const iso = `${y}-${pad2(m)}-${pad2(d)}`;
     if (isWorkday(iso, s)) out.push(iso);
   }
   return out;

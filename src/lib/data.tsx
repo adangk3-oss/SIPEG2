@@ -155,8 +155,20 @@ function loadDB(): DB {
     if (raw) {
       const db = JSON.parse(raw) as DB;
       if (db && Array.isArray(db.users) && Array.isArray(db.teachers) && db.settings) {
-        if (!db.settings.logos) db.settings.logos = { app: null, print: null };
-        return { ...db, settings: { ...DEFAULT_SETTINGS, ...db.settings } };
+        // Defensive: ensure every nested settings field exists (old localStorage may be missing them)
+        const s = db.settings;
+        if (!s.school) s.school = { ...DEFAULT_SETTINGS.school };
+        if (!s.workHours) s.workHours = { ...DEFAULT_SETTINGS.workHours };
+        if (!s.workDays) s.workDays = { defaultDays: [...DEFAULT_SETTINGS.workDays.defaultDays], overrides: {} };
+        if (!Array.isArray(s.workDays.defaultDays)) s.workDays.defaultDays = [...DEFAULT_SETTINGS.workDays.defaultDays];
+        if (!s.workDays.overrides || typeof s.workDays.overrides !== "object") s.workDays.overrides = {};
+        if (!s.signers) s.signers = JSON.parse(JSON.stringify(DEFAULT_SETTINGS.signers));
+        if (!s.signers.principal) s.signers.principal = { ...DEFAULT_SETTINGS.signers.principal };
+        if (!s.signers.staff) s.signers.staff = { ...DEFAULT_SETTINGS.signers.staff };
+        if (!s.logos) s.logos = { app: null, print: null };
+        if (!Array.isArray(db.logs)) db.logs = [];
+        if (!Array.isArray(db.records)) db.records = [];
+        return { ...db, settings: s };
       }
     }
   } catch {

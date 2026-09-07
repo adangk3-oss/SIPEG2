@@ -54,7 +54,7 @@ export default function Settings() {
   const s = db.settings;
   const [tab, setTab] = useState<Tab>("jam");
   const [ovrMonth, setOvrMonth] = useState(monthKeyOf(todayISO()));
-  const [ovrDays, setOvrDays] = useState<number[]>(s.workDays.overrides[monthKeyOf(todayISO())] ?? s.workDays.defaultDays);
+  const [ovrDays, setOvrDays] = useState<number[]>(s.workDays?.overrides?.[monthKeyOf(todayISO())] ?? s.workDays?.defaultDays ?? [1, 2, 3, 4, 5]);
   const [confirm, setConfirm] = useState<"reset" | "reseed" | "clear" | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -67,8 +67,8 @@ export default function Settings() {
     });
   };
 
-  const saveOverride = () => { setSettings((st) => { st.workDays.overrides[ovrMonth] = [...ovrDays].sort(); }); toast.push({ type: "success", title: "Hari kerja khusus disimpan", sub: fmtMonthID(ovrMonth) }); };
-  const removeOverride = (k: string) => { setSettings((st) => { delete st.workDays.overrides[k]; }); toast.push({ type: "info", title: "Aturan khusus dihapus", sub: `${fmtMonthID(k)} kembali ke bawaan` }); };
+  const saveOverride = () => { setSettings((st) => { if (!st.workDays.overrides) st.workDays.overrides = {}; st.workDays.overrides[ovrMonth] = [...ovrDays].sort(); }); toast.push({ type: "success", title: "Hari kerja khusus disimpan", sub: fmtMonthID(ovrMonth) }); };
+  const removeOverride = (k: string) => { setSettings((st) => { if (st.workDays.overrides) delete st.workDays.overrides[k]; }); toast.push({ type: "info", title: "Aturan khusus dihapus", sub: `${fmtMonthID(k)} kembali ke bawaan` }); };
 
   const exportBackup = () => { downloadBlob(`sipeg-backup-${todayISO()}.json`, new Blob([JSON.stringify(db, null, 2)], { type: "application/json" })); toast.push({ type: "success", title: "Backup diunduh" }); };
 
@@ -131,10 +131,10 @@ export default function Settings() {
             <div className="flex flex-wrap items-end gap-2 mt-5">
               <div>
                 <label className="label">Bulan</label>
-                <input type="month" className="input w-[160px]" value={ovrMonth} onChange={(e) => { setOvrMonth(e.target.value); setOvrDays(s.workDays.overrides[e.target.value] ?? s.workDays.defaultDays); }} />
+                <input type="month" className="input w-[160px]" value={ovrMonth} onChange={(e) => { setOvrMonth(e.target.value); setOvrDays(s.workDays?.overrides?.[e.target.value] ?? s.workDays?.defaultDays ?? [1, 2, 3, 4, 5]); }} />
               </div>
               <button className="btn btn-primary btn-md" onClick={saveOverride}>Simpan Khusus</button>
-              {s.workDays.overrides[ovrMonth] && <button className="btn btn-danger btn-md" onClick={() => { removeOverride(ovrMonth); setOvrDays(s.workDays.defaultDays); }}>Hapus Aturan</button>}
+              {s.workDays?.overrides?.[ovrMonth] && <button className="btn btn-danger btn-md" onClick={() => { removeOverride(ovrMonth); setOvrDays(s.workDays?.defaultDays ?? [1, 2, 3, 4, 5]); }}>Hapus Aturan</button>}
             </div>
             <div className="flex flex-wrap gap-2 mt-4">
               {DAY_SHORT.map((d, i) => {
@@ -144,9 +144,9 @@ export default function Settings() {
             </div>
             <div className="mt-5 border-t border-ink/8 pt-4">
               <p className="label">Bulan dengan aturan khusus</p>
-              {Object.keys(s.workDays.overrides).length === 0 ? <p className="text-sm text-ink/45">Belum ada — semua bulan memakai default.</p> : (
+              {Object.keys(s.workDays?.overrides ?? {}).length === 0 ? <p className="text-sm text-ink/45">Belum ada — semua bulan memakai default.</p> : (
                 <div className="flex flex-wrap gap-2">
-                  {Object.entries(s.workDays.overrides).map(([k, v]) => (
+                  {Object.entries(s.workDays?.overrides ?? {}).map(([k, v]) => (
                     <span key={k} className="inline-flex items-center gap-2 rounded-lg bg-amber-400/12 border border-amber-500/30 text-amber-800 text-xs font-bold px-2.5 py-1.5">
                       {fmtMonthID(k)} · {v.map((d) => DAY_SHORT[d]).join(" ")}
                       <button onClick={() => removeOverride(k)} className="hover:text-red-600" title="Hapus aturan"><IcTrash className="w-3.5 h-3.5" /></button>
