@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { applyScan, computeDailyRows, METHOD_LABEL, MODE_LABEL, STATUS_META, useNow, useStore } from "../lib/data";
+import { applyScan, computeDailyRows, METHOD_LABEL, MODE_LABEL, pushLog, STATUS_META, uid, useNow, useStore } from "../lib/data";
 import type { DB, ScanMethod, ScanMode, ScanResult, Teacher } from "../lib/types";
-import { fmtDateID, fmtDur, fmtHM, greeting, isWorkday, pad2, todayISO, workMinutes } from "../lib/time";
+import { fmtDateID, fmtDur, fmtHM, greeting, isLate, isWorkday, nowHMS, nowISO, pad2, todayISO, workMinutes } from "../lib/time";
 import { IcAlert, IcBarcode, IcCheck, IcClockIn, IcDoorOut, IcFace, IcHome, IcIdCard, IcInfo, IcPrinter, IcReturn, IcScan, IcUsers } from "../components/icons";
 import { Avatar, Badge, EmptyState, useToast } from "../components/ui";
 import { CardPrintModal } from "./BarcodeCard";
@@ -43,14 +43,75 @@ export default function Dashboard() {
 
   const processTeacher = (t: Teacher, method: ScanMethod) => {
     if (!currentUser) return;
-    const probe = JSON.parse(JSON.stringify(db)) as DB;
-    const res = applyScan(probe, t.id, mode, method, currentUser.name);
-    if (res.ok) update((d) => { applyScan(d, t.id, mode, method, currentUser.name); });
-    setResult({ key: Date.now(), ...res, teacher: t, method });
-    toast.push(
-      res.ok ? { type: "success", title: MODE_LABEL[mode], sub: res.message }
-        : { type: "error", title: "Presensi ditolak", sub: res.message },
-    );
+    
+    // Cek kondisi terlebih dahulu sebelum update
+    const date = todayISO();
+    const existingRec = db.records.find((r) => r.teacherId === t.id && r.date === date);
+    
+    // Validasi berdasarkan mode
+    let errorMessage: string | null = null;
+    
+    if (!t.active) {
+      errorMessage = `${t.name} berstatus nonaktif.`;
+    } else if (mode === "masuk" && existingRec?.timeIn) {
+      errorMessage = `${t.name} sudah presensi masuk pukul ${existingRec.timeIn.slice(0, 5)}.`;
+    } else if (mode === "izin_keluar") {
+      if (!existingRec?.timeIn) errorMessage = `${t.name} belum presensi masuk hari ini.`;
+      else if (existingRec.izinKeluar) errorMessage = `${t.name} sudah mencatat izin keluar.`;
+    } else if (mode === "masuk_kembali") {
+      if (!existingRec?.izinKeluar) errorMessage = `${t.name} belum memiliki izin keluar.`;
+      else if (existingRec.masukKembali) errorMessage = `${t.name} sudah masuk kembali.`;
+    } else if (mode === "pulang") {
+      if (!existingRec?.timeIn) errorMessage = `${t.name} belum presensi masuk hari ini.`;
+      else if (existingRec.timeOut) errorMessage = `${t.name} sudah presensi pulang.`;
+    }
+    
+    if (errorMessage) {
+      setResult({ key: Date.now(), ok: false, message: errorMessage, teacher: t, method });
+      toast.push({ type: "error", title: "Presensi ditolak", sub: errorMessage });
+      return;
+    }
+    
+    // Apply scan ke database
+    const time = nowHMS();
+    update((d) => {
+      let rec = d.records.find((r) => r.teacherId === t.id && r.date === date);
+      if (!rec) {
+        rec = {
+          id: uid(), teacherId: t.id, date, timeIn: null, timeOut: null,
+          izinKeluar: null, masukKembali: null, method, status: "hadir",
+          note: "", updatedAt: nowISO(),
+        };
+        d.records.push(rec);
+      }
+      
+      // Update record berdasarkan mode
+      switch (mode) {
+        case "masuk":
+          rec.timeIn = time;
+          rec.method = method;
+          rec.status = isLate(time, d.settings.workHours.start) ? "terlambat" : "hadir";
+          break;
+        case "izin_keluar":
+          rec.izinKeluar = time;
+          break;
+        case "masuk_kembali":
+          rec.masukKembali = time;
+          break;
+        case "pulang":
+          rec.timeOut = time;
+          break;
+      }
+      rec.updatedAt = nowISO();
+      
+      // Log aktivitas
+      pushLog(d, currentUser.name, "scan", MODE_LABEL[mode], `${t.name} · ${time.slice(0, 5)} · ${METHOD_LABEL[method]}`);
+    });
+    
+    // Update UI
+    const resultMessage = `${MODE_LABEL[mode]} berhasil — ${t.name} pukul ${time.slice(0, 5)}.`;
+    setResult({ key: Date.now(), ok: true, message: resultMessage, teacher: t, method, mode, time });
+    toast.push({ type: "success", title: MODE_LABEL[mode], sub: resultMessage });
   };
 
   const processCode = (code: string) => {
