@@ -189,6 +189,12 @@ export function FaceScanModal({
   const streamRef = useRef<MediaStream | null>(null);
   const intervalRef = useRef<number | null>(null);
   const toast = useToast();
+  const onResultRef = useRef(onResult);
+  
+  // Update ref setiap kali onResult berubah
+  useEffect(() => {
+    onResultRef.current = onResult;
+  }, [onResult]);
 
   const enrolled = teachers.filter((t) => t.faceId && t.active);
 
@@ -247,9 +253,9 @@ export function FaceScanModal({
                 sub: `${match.teacher.name} (${Math.round(match.score)}%)` 
               });
               
-              // Panggil callback setelah 1 detik
+              // Panggil callback setelah 1 detik menggunakan ref
               setTimeout(() => {
-                onResult(match.teacher, match.score);
+                onResultRef.current(match.teacher, match.score);
               }, 1000);
             }
           } catch (err) {
@@ -271,7 +277,7 @@ export function FaceScanModal({
       if (intervalRef.current) clearInterval(intervalRef.current);
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
-  }, [teachers, enrolled.length, onResult, toast]);
+  }, [teachers, enrolled.length, toast]);
 
   return (
     <Modal
